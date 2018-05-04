@@ -6,20 +6,26 @@ This module provides functions for creating elements and creating objects
 that are renderable in jupyter frontends.
 
 """
-
-from jsonschema import validate, Draft4Validator, ValidationError
 import json
 import warnings
-
 import os
 import io
-try:
+import sys
+
+from jsonschema import validate, Draft4Validator, ValidationError
+
+PY3 = sys.version_info[0]>=3
+
+if PY3:
     from html import escape
-except ImportError:
+    from io import StringIO
+    unicode = str
+else:
     # Python 2.x compatibility
     import cgi
     from functools import partial
     escape = partial(cgi.escape, quote=True)
+    from io import BytesIO as StringIO
 
 from vdom.frozendict import FrozenDict
 
@@ -88,7 +94,7 @@ class VDOM(object):
         self.key = key
 
         # Validate that all children are VDOMs or strings
-        if not all([isinstance(c, VDOM) or isinstance(c, str) for c in self.children]):
+        if not all([isinstance(c, (VDOM, str, unicode)) for c in self.children]):
             raise ValueError('Children must be a list of VDOM objects or strings')
 
         # mark completion of object creation. Object is immutable from now.
@@ -143,7 +149,7 @@ class VDOM(object):
         HTML escaping is performed wherever necessary.
         """
         # Use StringIO to avoid a large number of memory allocations with string concat
-        with io.StringIO() as out:
+        with StringIO() as out:
             out.write('<{tag}'.format(tag=escape(self.tag_name)))
 
             for k, v in self.attributes.items():
@@ -154,6 +160,8 @@ class VDOM(object):
             for c in self.children:
                 if isinstance(c, str):
                     out.write(escape(c))
+                elif isinstance(c, unicode):
+                    out.write(escape(c).encode('utf-8'))
                 else:
                     out.write(c._repr_html_())
 
